@@ -19,41 +19,34 @@ def main():
     )
 
     st.title("RSS to PDF - RTBF Bruxelles")
-    st.markdown("""
-    Cette application convertit les derniers articles de la RTBF Bruxelles en PDF.
-    Choisissez le nombre d'articles que vous souhaitez inclure.
-    """)
+    st.write("Cette application convertit les derniers articles de la RTBF Bruxelles en PDF.")
 
     # Sélecteur pour le nombre d'articles
-    num_articles = st.slider(
+    num_articles = st.number_input(
         "Nombre d'articles à récupérer",
         min_value=1,
         max_value=50,
-        value=10,
-        help="Choisissez combien d'articles vous voulez inclure dans le PDF"
+        value=10
     )
 
     # Bouton pour générer le PDF
-    if st.button("Générer le PDF", type="primary"):
-        with st.spinner('Génération du PDF en cours...'):
-            try:
+    if st.button("Générer le PDF"):
+        try:
+            with st.spinner('Génération du PDF en cours...'):
                 # URL du flux RSS de la RTBF - Actualités Bruxelles
                 rss_url = "https://rss.rtbf.be/article/rss/highlight_rtbfinfo_regions-bruxelles.xml"
                 
                 # Récupération des articles
-                progress_text = st.empty()
-                progress_text.text("Récupération des articles de la RTBF Bruxelles...")
+                st.info("Récupération des articles...")
                 articles = rss_to_pdf.fetch_rss_feed(rss_url)
                 articles = articles[:num_articles]
                 
                 # Création du PDF
-                progress_text.text("Création du PDF avec le contenu complet des articles...")
+                st.info("Création du PDF...")
                 filename = rss_to_pdf.create_pdf(articles)
                 
-                # Affichage du succès
-                st.success('PDF généré avec succès !')
-                
                 # Lien de téléchargement
+                st.success('PDF généré avec succès !')
                 st.markdown(
                     get_binary_file_downloader_html(filename, 'PDF'),
                     unsafe_allow_html=True
@@ -63,19 +56,15 @@ def main():
                 st.info(f"""
                 Informations sur le PDF :
                 - Nombre d'articles : {num_articles}
-                - Date de génération : {datetime.now().strftime('%d/%m/%Y %H:%M')}
                 - Taille du fichier : {os.path.getsize(filename) / 1024:.1f} KB
                 """)
                 
-            except Exception as e:
-                st.error(f"Une erreur est survenue : {str(e)}")
+        except Exception as e:
+            st.error(f"Une erreur est survenue : {str(e)}")
 
     # Footer
     st.markdown("---")
-    st.markdown("""
-    📱 Application créée avec Streamlit | 
-    [Code source](https://github.com/yvesthiran/rss-to-pdf)
-    """)
+    st.markdown("Application créée avec Streamlit | [Code source](https://github.com/yvesthiran/rss-to-pdf)")
 
 if __name__ == '__main__':
     main()
