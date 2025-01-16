@@ -2,7 +2,6 @@ import streamlit as st
 import rss_to_pdf
 import os
 import base64
-from datetime import datetime
 
 def get_binary_file_downloader_html(bin_file, file_label='File'):
     with open(bin_file, 'rb') as f:
@@ -25,8 +24,8 @@ def main():
     num_articles = st.number_input(
         "Nombre d'articles à récupérer",
         min_value=1,
-        max_value=50,
-        value=10
+        max_value=20,
+        value=5
     )
 
     # Bouton pour générer le PDF
@@ -37,30 +36,40 @@ def main():
                 rss_url = "https://rss.rtbf.be/article/rss/highlight_rtbfinfo_regions-bruxelles.xml"
                 
                 # Récupération des articles
-                st.info("Récupération des articles...")
-                articles = rss_to_pdf.fetch_rss_feed(rss_url)
-                articles = articles[:num_articles]
-                
-                # Création du PDF
-                st.info("Création du PDF...")
-                filename = rss_to_pdf.create_pdf(articles)
-                
-                # Lien de téléchargement
-                st.success('PDF généré avec succès !')
-                st.markdown(
-                    get_binary_file_downloader_html(filename, 'PDF'),
-                    unsafe_allow_html=True
-                )
-                
-                # Informations sur le PDF
-                st.info(f"""
-                Informations sur le PDF :
-                - Nombre d'articles : {num_articles}
-                - Taille du fichier : {os.path.getsize(filename) / 1024:.1f} KB
-                """)
+                with st.status("Récupération des articles...") as status:
+                    articles = rss_to_pdf.fetch_rss_feed(rss_url)
+                    if not articles:
+                        st.error("Impossible de récupérer les articles. Veuillez réessayer.")
+                        return
+                    
+                    articles = articles[:num_articles]
+                    status.update(label=f"{len(articles)} articles trouvés", state="running")
+                    
+                    # Création du PDF
+                    filename = rss_to_pdf.create_pdf(articles)
+                    
+                    if os.path.exists(filename):
+                        status.update(label="PDF généré avec succès !", state="complete")
+                        
+                        # Lien de téléchargement
+                        st.success('PDF généré avec succès !')
+                        st.markdown(
+                            get_binary_file_downloader_html(filename, 'PDF'),
+                            unsafe_allow_html=True
+                        )
+                        
+                        # Informations sur le PDF
+                        st.info(f"""
+                        Informations sur le PDF :
+                        - Nombre d'articles : {len(articles)}
+                        - Taille du fichier : {os.path.getsize(filename) / 1024:.1f} KB
+                        """)
+                    else:
+                        st.error("Erreur lors de la création du PDF. Veuillez réessayer.")
                 
         except Exception as e:
             st.error(f"Une erreur est survenue : {str(e)}")
+            st.stop()
 
     # Footer
     st.markdown("---")

@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import re
 from fpdf.enums import XPos, YPos
+import time
 
 class PDF(FPDF):
     def __init__(self):
@@ -12,9 +13,12 @@ class PDF(FPDF):
 
 def fetch_rss_feed(url):
     """Récupère les articles du flux RSS"""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
     try:
         print(f"Récupération du flux RSS : {url}")
-        response = requests.get(url, verify=False)
+        response = requests.get(url, headers=headers, verify=False)
         root = ET.fromstring(response.content)
         
         # Trouver tous les éléments 'item' (articles) dans le flux RSS
@@ -28,46 +32,52 @@ def fetch_rss_feed(url):
 
 def get_full_article_content(url):
     """Récupère le contenu complet d'un article"""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'fr,fr-FR;q=0.8,en-US;q=0.5,en;q=0.3',
+    }
+    
     try:
         print(f"Tentative de récupération du contenu de : {url}")
-        response = requests.get(url, verify=False)
+        response = requests.get(url, headers=headers, verify=False)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Essayons différents sélecteurs pour trouver le contenu
-        article_content = None
+        # Recherche spécifique pour RTBF
+        content_parts = []
         
-        # 1. Essai avec la classe article__text
-        article_content = soup.find('div', class_='article__text')
+        # 1. Chercher le chapô (introduction)
+        chapo = soup.find('div', class_='article__chapo')
+        if chapo:
+            content_parts.append(chapo.get_text().strip())
+            print("Chapô trouvé")
         
-        # 2. Si non trouvé, essayons d'autres sélecteurs communs
-        if not article_content:
-            article_content = soup.find('article')
+        # 2. Chercher le corps de l'article
+        article_body = soup.find('div', class_='article__body')
+        if article_body:
+            print("Corps de l'article trouvé")
+            # Extraire tous les paragraphes et sous-titres
+            for element in article_body.find_all(['p', 'h2', 'h3']):
+                text = element.get_text().strip()
+                if text and not any(cls in str(element.get('class', [])) for cls in ['social-media', 'advertisement']):
+                    content_parts.append(text)
         
-        if not article_content:
-            article_content = soup.find('div', class_='article-body')
-            
-        if not article_content:
-            article_content = soup.find('div', {'id': 'article-body'})
+        if not content_parts:
+            print("Recherche alternative du contenu")
+            # Essayer d'autres sélecteurs
+            main_content = soup.find('main') or soup.find('article') or soup.find('div', class_='article')
+            if main_content:
+                paragraphs = main_content.find_all('p')
+                content_parts = [p.get_text().strip() for p in paragraphs if len(p.get_text().strip()) > 50]
         
-        if article_content:
-            # Nettoyage du texte
-            text = article_content.get_text(separator='\n\n').strip()
-            # Suppression des lignes vides multiples
-            text = re.sub(r'\n\s*\n', '\n\n', text)
-            print(f"Contenu trouvé : {text[:100]}...")  # Affiche les 100 premiers caractères
-            return text
+        if content_parts:
+            full_text = '\n\n'.join(content_parts)
+            print(f"Contenu trouvé ({len(full_text)} caractères)")
+            return full_text
         else:
-            print("Aucun contenu d'article trouvé avec les sélecteurs connus")
-            # Si on ne trouve pas le contenu, cherchons tous les paragraphes
-            paragraphs = soup.find_all('p')
-            if paragraphs:
-                text = '\n\n'.join(p.get_text().strip() for p in paragraphs if p.get_text().strip())
-                print(f"Contenu trouvé via paragraphes : {text[:100]}...")
-                return text
+            print("Aucun contenu trouvé")
+            return "Contenu non disponible"
             
-        print("Impossible de trouver le contenu de l'article")
-        return "Contenu non disponible - Article protégé ou format non reconnu"
-        
     except Exception as e:
         print(f"Erreur lors de la récupération du contenu : {str(e)}")
         return f"Erreur lors de la récupération du contenu : {str(e)}"
@@ -75,68 +85,53 @@ def get_full_article_content(url):
 def create_pdf(articles):
     """Crée un PDF avec les articles"""
     pdf = PDF()
-    
-    # Ajout de la première page
     pdf.add_page()
     
-    # Configuration de la police
-    pdf.set_font('Helvetica', '', 10)
-    
     # Titre du document
-    pdf.set_font('Helvetica', 'B', 14)
-    pdf.cell(0, 8, "Articles RSS - RTBF Bruxelles", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-    pdf.ln(8)
+    pdf.set_font('Helvetica', 'B', 16)
+    pdf.cell(0, 10, "Articles RTBF Bruxelles", ln=True, align='C')
     
     # Date de génération
-    pdf.set_font('Helvetica', '', 8)
-    current_date = datetime.now().strftime("%d/%m/%Y %H:%M")
-    pdf.cell(0, 8, f"Généré le {current_date}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.ln(8)
+    pdf.set_font('Helvetica', '', 10)
+    pdf.cell(0, 10, f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}", ln=True, align='C')
+    pdf.ln(10)
     
-    # Ajout des articles
     for i, article in enumerate(articles, 1):
-        try:
-            # Nouvelle page pour chaque article
-            pdf.add_page()
+        pdf.add_page()
+        
+        # Titre de l'article
+        pdf.set_font('Helvetica', 'B', 14)
+        title = article.find('title').text
+        pdf.multi_cell(0, 10, f"{i}. {title}")
+        
+        # Date de publication
+        pdf.set_font('Helvetica', 'I', 10)
+        pub_date = article.find('pubDate')
+        if pub_date is not None:
+            pdf.cell(0, 10, f"Publié le {pub_date.text}", ln=True)
+        
+        # URL de l'article
+        link = article.find('link')
+        if link is not None:
+            url = link.text
+            print(f"\nArticle {i}/{len(articles)} : {title}")
             
-            # Titre de l'article
-            pdf.set_font('Helvetica', 'B', 12)
-            title = article.find('title').text
-            pdf.multi_cell(0, 8, f"{i}. {title}")
-            pdf.ln(4)
-            
-            # Date de publication
-            pub_date = article.find('pubDate')
-            if pub_date is not None:
-                pdf.set_font('Helvetica', '', 8)
-                pdf.cell(0, 8, f"Publié le : {pub_date.text}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.ln(4)
-            
-            # Récupération du contenu complet
-            link = article.find('link')
-            if link is not None:
-                url = link.text
-                print(f"Récupération de l'article {i}/{len(articles)} : {title}")
-                
-                # Récupérer le contenu complet
-                full_content = get_full_article_content(url)
-                
-                if full_content:
-                    pdf.set_font('Helvetica', '', 10)
-                    pdf.multi_cell(0, 6, full_content)
-                else:
-                    # Si on ne peut pas récupérer le contenu complet, on utilise le résumé
-                    description = article.find('description')
-                    if description is not None:
-                        content = description.text
-                        pdf.set_font('Helvetica', '', 10)
-                        pdf.multi_cell(0, 6, content)
-            
-            pdf.ln(8)
-            
-        except Exception as e:
-            print(f"Erreur lors du traitement de l'article {i}: {str(e)}")
-            continue
+            # Récupérer et ajouter le contenu
+            content = get_full_article_content(url)
+            if content and content != "Contenu non disponible":
+                pdf.ln(5)
+                pdf.set_font('Helvetica', '', 11)
+                pdf.multi_cell(0, 6, content)
+            else:
+                # Si pas de contenu complet, utiliser la description
+                description = article.find('description')
+                if description is not None:
+                    pdf.ln(5)
+                    pdf.set_font('Helvetica', '', 11)
+                    pdf.multi_cell(0, 6, description.text)
+        
+        # Petite pause pour ne pas surcharger le serveur
+        time.sleep(1)
     
     # Sauvegarde du PDF
     filename = f'articles_rtbf_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
