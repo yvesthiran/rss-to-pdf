@@ -7,6 +7,7 @@ import ssl
 from fpdf.enums import XPos, YPos
 import requests
 import time
+import re
 
 class PDF(FPDF):
     def __init__(self):
@@ -30,55 +31,50 @@ def fetch_rss_feed(url):
     return items[:10]  # Retourner les 10 premiers articles
 
 def get_full_article_content(url):
-    """Récupère le contenu complet d'un article depuis son URL"""
+    """Récupère le contenu complet d'un article"""
     try:
-        # Ajouter des en-têtes pour simuler un navigateur
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        print(f"Téléchargement de {url}")
-        # Récupérer la page
-        response = requests.get(url, headers=headers, verify=False)
-        response.raise_for_status()
-        
-        # Parser le HTML
+        print(f"Tentative de récupération du contenu de : {url}")
+        response = requests.get(url, verify=False)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Pour RTBF, essayons différents sélecteurs pour trouver le contenu
-        content_parts = []
+        # Essayons différents sélecteurs pour trouver le contenu
+        article_content = None
         
-        # Chercher le chapô (introduction)
-        chapo = soup.find('div', class_='article__chapo')
-        if chapo:
-            content_parts.append(chapo.get_text().strip())
+        # 1. Essai avec la classe article__text
+        article_content = soup.find('div', class_='article__text')
         
-        # Chercher le contenu principal avec différents sélecteurs
-        article_body = soup.find('div', class_='article__body')
-        if article_body:
-            # Chercher tous les paragraphes et sous-titres
-            for element in article_body.find_all(['p', 'h2', 'h3']):
-                # Ignorer les éléments qui ne font pas partie du contenu principal
-                if not any(cls in str(element.get('class', [])) for cls in ['social-media', 'advertisement', 'embed']):
-                    text = element.get_text().strip()
-                    if text:  # Ne pas ajouter les paragraphes vides
-                        content_parts.append(text)
+        # 2. Si non trouvé, essayons d'autres sélecteurs communs
+        if not article_content:
+            article_content = soup.find('article')
         
-        if content_parts:
-            # Joindre toutes les parties avec des sauts de ligne
-            return '\n\n'.join(content_parts)
+        if not article_content:
+            article_content = soup.find('div', class_='article-body')
+            
+        if not article_content:
+            article_content = soup.find('div', {'id': 'article-body'})
         
-        # Si on n'a pas trouvé de contenu, essayer une autre approche
-        all_paragraphs = soup.find_all('p')
-        if all_paragraphs:
-            content = '\n\n'.join([p.get_text().strip() for p in all_paragraphs if len(p.get_text().strip()) > 50])
-            if content:
-                return content
+        if article_content:
+            # Nettoyage du texte
+            text = article_content.get_text(separator='\n\n').strip()
+            # Suppression des lignes vides multiples
+            text = re.sub(r'\n\s*\n', '\n\n', text)
+            print(f"Contenu trouvé : {text[:100]}...")  # Affiche les 100 premiers caractères
+            return text
+        else:
+            print("Aucun contenu d'article trouvé avec les sélecteurs connus")
+            # Si on ne trouve pas le contenu, cherchons tous les paragraphes
+            paragraphs = soup.find_all('p')
+            if paragraphs:
+                text = '\n\n'.join(p.get_text().strip() for p in paragraphs if p.get_text().strip())
+                print(f"Contenu trouvé via paragraphes : {text[:100]}...")
+                return text
+            
+        print("Impossible de trouver le contenu de l'article")
+        return "Contenu non disponible - Article protégé ou format non reconnu"
         
-        return None
     except Exception as e:
-        print(f"Erreur lors de la récupération de l'article complet : {str(e)}")
-        return None
+        print(f"Erreur lors de la récupération du contenu : {str(e)}")
+        return f"Erreur lors de la récupération du contenu : {str(e)}"
 
 def clean_html(html_content):
     """Nettoie le contenu HTML pour n'avoir que le texte"""
