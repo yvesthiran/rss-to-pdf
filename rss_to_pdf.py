@@ -6,10 +6,30 @@ from datetime import datetime
 import re
 from fpdf.enums import XPos, YPos
 import time
+import unicodedata
+
+def clean_text_for_pdf(text):
+    """Nettoie le texte pour le rendre compatible avec le PDF"""
+    if not text:
+        return ""
+    # Remplacer les caractères spéciaux par leurs équivalents ASCII
+    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+    # Supprimer les caractères non supportés
+    text = re.sub(r'[^\x00-\x7F]+', '', text)
+    # Remplacer les guillemets typographiques par des guillemets simples
+    text = text.replace('"', '"').replace('"', '"')
+    text = text.replace(''', "'").replace(''', "'")
+    return text
 
 class PDF(FPDF):
     def __init__(self):
         super().__init__()
+
+    def add_text(self, text, font_size=11, style=''):
+        """Ajoute du texte au PDF en gérant les caractères spéciaux"""
+        self.set_font('Helvetica', style, font_size)
+        clean_text = clean_text_for_pdf(text)
+        self.multi_cell(0, font_size * 0.6, clean_text)
 
 def fetch_rss_feed(url):
     """Récupère les articles du flux RSS"""
@@ -20,12 +40,12 @@ def fetch_rss_feed(url):
         print(f"Récupération du flux RSS : {url}")
         response = requests.get(url, headers=headers, verify=False)
         root = ET.fromstring(response.content)
-        
+
         # Trouver tous les éléments 'item' (articles) dans le flux RSS
         items = root.findall('.//item')
         print(f"Nombre d'articles trouvés : {len(items)}")
         return items
-        
+
     except Exception as e:
         print(f"Erreur lors de la récupération du flux RSS : {str(e)}")
         return []
@@ -37,21 +57,21 @@ def get_full_article_content(url):
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'fr,fr-FR;q=0.8,en-US;q=0.5,en;q=0.3',
     }
-    
+
     try:
         print(f"Tentative de récupération du contenu de : {url}")
         response = requests.get(url, headers=headers, verify=False)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
+
         # Recherche spécifique pour RTBF
         content_parts = []
-        
+
         # 1. Chercher le chapô (introduction)
         chapo = soup.find('div', class_='article__chapo')
         if chapo:
             content_parts.append(chapo.get_text().strip())
             print("Chapô trouvé")
-        
+
         # 2. Chercher le corps de l'article
         article_body = soup.find('div', class_='article__body')
         if article_body:
@@ -61,7 +81,7 @@ def get_full_article_content(url):
                 text = element.get_text().strip()
                 if text and not any(cls in str(element.get('class', [])) for cls in ['social-media', 'advertisement']):
                     content_parts.append(text)
-        
+
         if not content_parts:
             print("Recherche alternative du contenu")
             # Essayer d'autres sélecteurs
@@ -69,7 +89,7 @@ def get_full_article_content(url):
             if main_content:
                 paragraphs = main_content.find_all('p')
                 content_parts = [p.get_text().strip() for p in paragraphs if len(p.get_text().strip()) > 50]
-        
+
         if content_parts:
             full_text = '\n\n'.join(content_parts)
             print(f"Contenu trouvé ({len(full_text)} caractères)")
@@ -77,7 +97,7 @@ def get_full_article_content(url):
         else:
             print("Aucun contenu trouvé")
             return "Contenu non disponible"
-            
+
     except Exception as e:
         print(f"Erreur lors de la récupération du contenu : {str(e)}")
         return f"Erreur lors de la récupération du contenu : {str(e)}"
@@ -86,53 +106,50 @@ def create_pdf(articles):
     """Crée un PDF avec les articles"""
     pdf = PDF()
     pdf.add_page()
-    
+
     # Titre du document
-    pdf.set_font('Helvetica', 'B', 16)
-    pdf.cell(0, 10, "Articles RTBF Bruxelles", ln=True, align='C')
-    
-    # Date de génération
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 10, f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}", ln=True, align='C')
+    pdf.add_text("Articles RTBF Bruxelles", font_size=16, style='B')
     pdf.ln(10)
-    
+
+    # Date de génération
+    pdf.add_text(f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}", font_size=10)
+    pdf.ln(10)
+
     for i, article in enumerate(articles, 1):
         pdf.add_page()
-        
+
         # Titre de l'article
-        pdf.set_font('Helvetica', 'B', 14)
-        title = article.find('title').text
-        pdf.multi_cell(0, 10, f"{i}. {title}")
-        
+        title = clean_text_for_pdf(article.find('title').text)
+        pdf.add_text(f"{i}. {title}", font_size=14, style='B')
+        pdf.ln(5)
+
         # Date de publication
-        pdf.set_font('Helvetica', 'I', 10)
         pub_date = article.find('pubDate')
         if pub_date is not None:
-            pdf.cell(0, 10, f"Publié le {pub_date.text}", ln=True)
-        
+            pdf.add_text(f"Publié le {clean_text_for_pdf(pub_date.text)}", font_size=10, style='I')
+            pdf.ln(5)
+
         # URL de l'article
         link = article.find('link')
         if link is not None:
             url = link.text
             print(f"\nArticle {i}/{len(articles)} : {title}")
-            
+
             # Récupérer et ajouter le contenu
             content = get_full_article_content(url)
             if content and content != "Contenu non disponible":
                 pdf.ln(5)
-                pdf.set_font('Helvetica', '', 11)
-                pdf.multi_cell(0, 6, content)
+                pdf.add_text(content, font_size=11)
             else:
                 # Si pas de contenu complet, utiliser la description
                 description = article.find('description')
                 if description is not None:
                     pdf.ln(5)
-                    pdf.set_font('Helvetica', '', 11)
-                    pdf.multi_cell(0, 6, description.text)
-        
+                    pdf.add_text(description.text, font_size=11)
+
         # Petite pause pour ne pas surcharger le serveur
         time.sleep(1)
-    
+
     # Sauvegarde du PDF
     filename = f'articles_rtbf_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
     pdf.output(filename)
@@ -141,13 +158,13 @@ def create_pdf(articles):
 def main():
     # URL du flux RSS de la RTBF - Actualités Bruxelles
     rss_url = "https://rss.rtbf.be/article/rss/highlight_rtbfinfo_regions-bruxelles.xml"
-    
+
     print("Récupération des articles de la RTBF Bruxelles...")
     articles = fetch_rss_feed(rss_url)
-    
+
     print("Création du PDF avec le contenu complet des articles...")
     filename = create_pdf(articles)
-    
+
     print(f"PDF créé avec succès : {filename}")
     return filename
 
