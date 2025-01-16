@@ -1,34 +1,30 @@
-import urllib.request
+import requests
 import xml.etree.ElementTree as ET
 from fpdf import FPDF
 from bs4 import BeautifulSoup
 from datetime import datetime
-import ssl
-from fpdf.enums import XPos, YPos
-import requests
-import time
 import re
+from fpdf.enums import XPos, YPos
 
 class PDF(FPDF):
     def __init__(self):
         super().__init__()
-        # Pas besoin d'ajouter de police, on utilisera Helvetica qui est intégrée
 
 def fetch_rss_feed(url):
     """Récupère les articles du flux RSS"""
-    # Ignorer la vérification SSL pour simplifier
-    context = ssl._create_unverified_context()
-    
-    # Récupérer le contenu XML
-    response = urllib.request.urlopen(url, context=context)
-    xml_content = response.read()
-    
-    # Parser le XML
-    root = ET.fromstring(xml_content)
-    
-    # Trouver tous les articles (items)
-    items = root.findall('.//item')
-    return items[:10]  # Retourner les 10 premiers articles
+    try:
+        print(f"Récupération du flux RSS : {url}")
+        response = requests.get(url, verify=False)
+        root = ET.fromstring(response.content)
+        
+        # Trouver tous les éléments 'item' (articles) dans le flux RSS
+        items = root.findall('.//item')
+        print(f"Nombre d'articles trouvés : {len(items)}")
+        return items
+        
+    except Exception as e:
+        print(f"Erreur lors de la récupération du flux RSS : {str(e)}")
+        return []
 
 def get_full_article_content(url):
     """Récupère le contenu complet d'un article"""
@@ -76,13 +72,6 @@ def get_full_article_content(url):
         print(f"Erreur lors de la récupération du contenu : {str(e)}")
         return f"Erreur lors de la récupération du contenu : {str(e)}"
 
-def clean_html(html_content):
-    """Nettoie le contenu HTML pour n'avoir que le texte"""
-    if html_content:
-        soup = BeautifulSoup(html_content, 'html.parser')
-        return soup.get_text().strip()
-    return ""
-
 def create_pdf(articles):
     """Crée un PDF avec les articles"""
     pdf = PDF()
@@ -95,7 +84,7 @@ def create_pdf(articles):
     
     # Titre du document
     pdf.set_font('Helvetica', 'B', 14)
-    pdf.cell(0, 8, "Articles RSS", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.cell(0, 8, "Articles RSS - RTBF Bruxelles", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
     pdf.ln(8)
     
     # Date de génération
@@ -105,7 +94,6 @@ def create_pdf(articles):
     pdf.ln(8)
     
     # Ajout des articles
-    pdf.set_font('Helvetica', '', 10)
     for i, article in enumerate(articles, 1):
         try:
             # Nouvelle page pour chaque article
@@ -113,7 +101,8 @@ def create_pdf(articles):
             
             # Titre de l'article
             pdf.set_font('Helvetica', 'B', 12)
-            pdf.multi_cell(0, 8, f"{i}. {article.find('title').text}")
+            title = article.find('title').text
+            pdf.multi_cell(0, 8, f"{i}. {title}")
             pdf.ln(4)
             
             # Date de publication
@@ -127,7 +116,7 @@ def create_pdf(articles):
             link = article.find('link')
             if link is not None:
                 url = link.text
-                print(f"Récupération de l'article {i}/{len(articles)} : {article.find('title').text}")
+                print(f"Récupération de l'article {i}/{len(articles)} : {title}")
                 
                 # Récupérer le contenu complet
                 full_content = get_full_article_content(url)
@@ -139,7 +128,7 @@ def create_pdf(articles):
                     # Si on ne peut pas récupérer le contenu complet, on utilise le résumé
                     description = article.find('description')
                     if description is not None:
-                        content = clean_html(description.text)
+                        content = description.text
                         pdf.set_font('Helvetica', '', 10)
                         pdf.multi_cell(0, 6, content)
             
