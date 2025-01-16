@@ -11,7 +11,7 @@ import time
 class PDF(FPDF):
     def __init__(self):
         super().__init__()
-        self.add_font('DejaVu', '', 'fonts/DejaVuSans.ttf', uni=True)
+        self.add_font('Roboto', '', 'fonts/Roboto-Regular.ttf', uni=True)
 
 def fetch_rss_feed(url):
     """Récupère les articles du flux RSS"""
@@ -92,34 +92,34 @@ def create_pdf(articles):
     pdf = PDF()
     
     # Configuration de la police
-    pdf.set_font('DejaVu', '', 10)
+    pdf.set_font('Roboto', '', 10)
     
     # Titre du document
-    pdf.set_font('DejaVu', '', 14)
+    pdf.set_font('Roboto', '', 14)
     pdf.cell(0, 8, "Articles RSS", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
     pdf.ln(8)
     
     # Date de génération
-    pdf.set_font('DejaVu', '', 8)
+    pdf.set_font('Roboto', '', 8)
     current_date = datetime.now().strftime("%d/%m/%Y %H:%M")
     pdf.cell(0, 8, f"Généré le {current_date}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(8)
     
     # Ajout des articles
-    pdf.set_font('DejaVu', '', 10)
+    pdf.set_font('Roboto', '', 10)
     for i, article in enumerate(articles, 1):
         try:
             pdf.add_page()
             
             # Titre de l'article
-            pdf.set_font('DejaVu', '', 12)
+            pdf.set_font('Roboto', '', 12)
             pdf.multi_cell(0, 8, f"{i}. {article.find('title').text}")
             pdf.ln(4)
             
             # Date de publication
             pub_date = article.find('pubDate')
             if pub_date is not None:
-                pdf.set_font('DejaVu', '', 8)
+                pdf.set_font('Roboto', '', 8)
                 pdf.cell(0, 8, f"Publié le : {pub_date.text}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 pdf.ln(4)
             
@@ -133,14 +133,14 @@ def create_pdf(articles):
                 full_content = get_full_article_content(url)
                 
                 if full_content:
-                    pdf.set_font('DejaVu', '', 10)
+                    pdf.set_font('Roboto', '', 10)
                     pdf.multi_cell(0, 6, full_content)
                 else:
                     # Si on ne peut pas récupérer le contenu complet, on utilise le résumé
                     description = article.find('description')
                     if description is not None:
                         content = clean_html(description.text)
-                        pdf.set_font('DejaVu', '', 10)
+                        pdf.set_font('Roboto', '', 10)
                         pdf.multi_cell(0, 6, content)
             
             pdf.ln(8)
