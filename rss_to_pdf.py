@@ -11,7 +11,7 @@ import time
 class PDF(FPDF):
     def __init__(self):
         super().__init__()
-        self.add_font('DejaVu', '', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf', uni=True)
+        self.add_font('DejaVu', '', 'fonts/DejaVuSans.ttf', uni=True)
 
 def fetch_rss_feed(url):
     """Récupère les articles du flux RSS"""
@@ -90,7 +90,6 @@ def clean_html(html_content):
 def create_pdf(articles):
     """Crée un PDF avec les articles"""
     pdf = PDF()
-    pdf.add_page()
     
     # Configuration de la police
     pdf.set_font('DejaVu', '', 10)
@@ -110,10 +109,11 @@ def create_pdf(articles):
     pdf.set_font('DejaVu', '', 10)
     for i, article in enumerate(articles, 1):
         try:
+            pdf.add_page()
+            
             # Titre de l'article
-            title = article.find('title').text
             pdf.set_font('DejaVu', '', 12)
-            pdf.multi_cell(0, 8, f"{i}. {title}")
+            pdf.multi_cell(0, 8, f"{i}. {article.find('title').text}")
             pdf.ln(4)
             
             # Date de publication
@@ -127,7 +127,7 @@ def create_pdf(articles):
             link = article.find('link')
             if link is not None:
                 url = link.text
-                print(f"Récupération de l'article {i}/{len(articles)} : {title}")
+                print(f"Récupération de l'article {i}/{len(articles)} : {article.find('title').text}")
                 
                 # Récupérer le contenu complet
                 full_content = get_full_article_content(url)
