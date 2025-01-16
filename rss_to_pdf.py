@@ -91,6 +91,9 @@ def create_pdf(articles):
     """Crée un PDF avec les articles"""
     pdf = PDF()
     
+    # Ajout de la première page
+    pdf.add_page()
+    
     # Configuration de la police
     pdf.set_font('Helvetica', '', 10)
     
@@ -109,6 +112,7 @@ def create_pdf(articles):
     pdf.set_font('Helvetica', '', 10)
     for i, article in enumerate(articles, 1):
         try:
+            # Nouvelle page pour chaque article
             pdf.add_page()
             
             # Titre de l'article
@@ -123,7 +127,7 @@ def create_pdf(articles):
                 pdf.cell(0, 8, f"Publié le : {pub_date.text}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 pdf.ln(4)
             
-            # Récupérer l'URL de l'article
+            # Récupération du contenu complet
             link = article.find('link')
             if link is not None:
                 url = link.text
@@ -145,19 +149,12 @@ def create_pdf(articles):
             
             pdf.ln(8)
             
-            # Ajouter une ligne de séparation entre les articles
-            pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
-            pdf.ln(8)
-            
-            # Petite pause entre chaque article pour ne pas surcharger le serveur
-            time.sleep(1)
-            
         except Exception as e:
-            print(f"Erreur lors du traitement d'un article : {str(e)}")
+            print(f"Erreur lors du traitement de l'article {i}: {str(e)}")
             continue
     
     # Sauvegarde du PDF
-    filename = f"articles_rss_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    filename = f'articles_rtbf_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
     pdf.output(filename)
     return filename
 
